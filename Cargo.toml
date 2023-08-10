@@ -1,0 +1,18 @@
+[package]
+name = "sudoku-solver"
+version = "0.1.0"
+edition = "2021"
+authors = [ "Lut99" ]
+repository = "https://github.com/Lut99/sudoku-solver-rs"
+description = "A sudoku solver in Rust, using [ratatui](https://github.com/ratatui-org/ratatui) for a fancy interface."
+
+
+[dependencies]
+clap = { version = "4.3", features = ["derive"] }
+crossterm = "0.27"
+enum-debug = { git = "https://github.com/Lut99/enum-debug", features = ["derive"] }
+humanlog = { git = "https://github.com/Lut99/humanlog-rs" }
+log = "0.4"
+ratatui = { version = "0.22", default-features = false, features = ["crossterm"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
