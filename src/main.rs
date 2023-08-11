@@ -4,7 +4,7 @@
 //  Created:
 //    10 Aug 2023, 23:01:37
 //  Last edited:
-//    11 Aug 2023, 17:03:09
+//    11 Aug 2023, 23:38:21
 //  Auto updated?
 //    Yes
 // 
@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
+use console::Style;
 use humanlog::{DebugMode, HumanLogger};
 use log::error;
 
@@ -35,6 +36,9 @@ struct Arguments {
     #[clap(name="FILES", help="If given, loads the Sudoku from the given file instead of querying the user. Check '--file-type' to change the default file type.")]
     files : Vec<PathBuf>,
 
+    /// If given, does not show the final version but instead shows only the solutions to the `n` first cells.
+    #[clap(long, help="If given, does not show the final version but instead shows only the solutions to the given number of first empty cells.")]
+    hint       : Option<u8>,
     /// Determines the type of the loaded file.
     #[clap(short='t', long, help="Overrides deriving the input file type with this fixed type instead. Note that this applies to ALL input files. Will be ignored if no file is given.")]
     input_type : Option<FileType>,
@@ -128,9 +132,34 @@ fn main() {
         println!();
     
         // Write it to the terminal
-        for (i, solution) in solutions.into_iter().enumerate() {
-            println!("Solution to Sudoku '{}':", sudokus[i].0);
-            println!("{}", solution.masked(&sudokus[i].1));
+        if let Some(n_hints) = args.hint {
+            for (i, solution) in solutions.into_iter().enumerate() {
+                println!("Hint to Sudoku '{}':", sudokus[i].0);
+
+                // Find the first N slots in the mask and add the solutions from the solved sudoku
+                let mut hint: Sudoku = sudokus[i].1;
+                let mut j: usize = 0;
+                'main: for y in 0..9 {
+                    for x in 0..9 {
+                        // Quit if we exceeded the number of requested hints
+                        if j >= n_hints as usize { break 'main; }
+
+                        // If the hint is empty, add in the thing
+                        if hint.rows[y][x].is_none() {
+                            hint.rows[y][x] = solution.rows[y][x];
+                            j += 1;
+                        }
+                    }
+                }
+
+                // Show the hint
+                println!("{}", hint.masked(&sudokus[i].1).colour(Style::new().green().bold()));
+            }
+        } else {
+            for (i, solution) in solutions.into_iter().enumerate() {
+                println!("Solution to Sudoku '{}':", sudokus[i].0);
+                println!("{}", solution.masked(&sudokus[i].1));
+            }
         }
     }
 

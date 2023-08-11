@@ -4,7 +4,7 @@
 //  Created:
 //    11 Aug 2023, 11:42:21
 //  Last edited:
-//    11 Aug 2023, 17:16:06
+//    11 Aug 2023, 23:36:52
 //  Auto updated?
 //    Yes
 // 
@@ -156,13 +156,28 @@ pub struct SudokuMaskFormatter<'s, 'm> {
     sudoku : &'s Sudoku,
     /// The mask to apply.
     mask   : &'m Sudoku,
+    /// The colour for typical things.
+    colour : Style,
+}
+impl<'s, 'm> SudokuMaskFormatter<'s, 'm> {
+    /// Overrides the colour for the found solutions.
+    /// 
+    /// # Arguments
+    /// - `colour`: The [`Style`] that determines the new colour.
+    /// 
+    /// # Returns
+    /// A mutable reference to self for chaining.
+    #[inline]
+    pub fn colour(&mut self, colour: impl Into<Style>) -> &mut Self {
+        self.colour = colour.into();
+        self
+    }
 }
 impl<'s, 'm> Display for SudokuMaskFormatter<'s, 'm> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
         // Define the colours
         let masked : Style = Style::new().bold().blue();
         let error  : Style = Style::new().black().on_red();
-        let dim    : Style = Style::new().bold();
         let gray   : Style = Style::new().black().bright();
 
         // Generate the rows...
@@ -184,7 +199,7 @@ impl<'s, 'm> Display for SudokuMaskFormatter<'s, 'm> {
                 } else if self.mask.rows[y][x].is_some() {
                     write!(f, " {} ", error.apply_to(svalue))?;
                 } else {
-                    write!(f, " {} ", dim.apply_to(svalue))?;
+                    write!(f, " {} ", self.colour.apply_to(svalue))?;
                 }
 
                 // Write the border
@@ -414,7 +429,7 @@ impl Sudoku {
     /// # Returns
     /// A [`SudokuMaskFormatter`] that can format the Sudoku with colours.
     #[inline]
-    pub fn masked<'s, 'm>(&'s self, mask: &'m Sudoku) -> SudokuMaskFormatter<'s, 'm> { SudokuMaskFormatter { sudoku: self, mask } }
+    pub fn masked<'s, 'm>(&'s self, mask: &'m Sudoku) -> SudokuMaskFormatter<'s, 'm> { SudokuMaskFormatter { sudoku: self, mask, colour: Style::new().bold() } }
 
     /// Renders the Sudoku as a ratatui [`Table`] widget.
     /// 
