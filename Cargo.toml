@@ -9,7 +9,7 @@ description = "A sudoku solver in Rust, using [ratatui](https://github.com/ratat
 
 [dependencies]
 clap = { version = "4.3", features = ["derive"] }
-crossterm = "0.27"
+crossterm = "*"
 enum-debug = { git = "https://github.com/Lut99/enum-debug", features = ["derive"] }
 humanlog = { git = "https://github.com/Lut99/humanlog-rs" }
 log = "0.4"

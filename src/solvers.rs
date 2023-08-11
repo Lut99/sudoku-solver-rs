@@ -4,7 +4,7 @@
 //  Created:
 //    10 Aug 2023, 23:03:23
 //  Last edited:
-//    11 Aug 2023, 00:43:40
+//    11 Aug 2023, 15:00:26
 //  Auto updated?
 //    Yes
 // 
@@ -12,7 +12,42 @@
 //!   Implements the Sudoku solver(s).
 // 
 
-use crate::spec::Sudoku;
+use crate::sudoku::Sudoku;
+
+
+/***** TESTS *****/
+#[cfg(test)]
+mod tests {
+    use crate::utils::{load_sudoku, PrettyError as _};
+    use super::*;
+
+    #[test]
+    fn test_brute_force_solver() {
+        // Test an empty Sudoku can be solved
+        {
+            let empty: Sudoku = load_sudoku("./tests/empty.json").unwrap_or_else(|err| panic!("Failed to load empty Sudoku: {}", err.pretty()));
+            println!("\n{empty}");
+
+            let mut solver: BruteForceSolver = BruteForceSolver::new();
+            let solved: Sudoku = solver.run(empty);
+            assert!(solved.is_finished());
+        }
+
+        // Test if a fixed Sudoku is solved
+        {
+            let correct: Sudoku = load_sudoku("./tests/correct.json").unwrap_or_else(|err| panic!("Failed to load correct Sudoku: {}", err.pretty()));
+            println!("{correct}");
+
+            let mut solver: BruteForceSolver = BruteForceSolver::new();
+            let solved: Sudoku = solver.run(correct);
+            assert!(solved.is_finished());
+            assert_eq!(correct, solved);
+        }
+    }
+}
+
+
+
 
 
 /***** AUXILLARY *****/
@@ -66,7 +101,7 @@ impl Solver for BruteForceSolver {
     fn run_with_callback<E>(&mut self, sudoku: Sudoku, mut callback: impl FnMut(&Sudoku) -> Result<bool, E>) -> Result<Option<Sudoku>, E> {
         let mut best         : (f64, Sudoku) = (sudoku.score(), sudoku);
         let mut search_space : Vec<Sudoku>   = vec![ sudoku ];
-        while let Some(mut attempt) = search_space.pop() {
+        while let Some(attempt) = search_space.pop() {
             // Discard this attempt if it is not well-formed
             if !attempt.is_well_formed() { continue; }
             // Update the best one
@@ -77,15 +112,25 @@ impl Solver for BruteForceSolver {
             // Run the callback
             if !callback(&attempt)? { return Ok(None); };
 
-            // Find the first empty cell and generate all possibilities
-            for y in 0..9 {
+            // Find the first empty cell
+            'empty_cell: for y in 0..9 {
                 for x in 0..9 {
-                    if attempt.rows[y][x].is_none() {
-                        search_space.extend((1..=9).map(|i| {
-                            attempt.rows[y][x] = Some(i);
-                            attempt
-                        }))
+                    // Skip if not None
+                    if attempt.rows[y][x].is_some() { continue; }
+
+                    // Iterate over the possibilities
+                    for v in 1..=9 {
+                        // Check if valid
+                        if !attempt.is_cell_valid(x, y, v) { continue; }
+
+                        // Alright add the possibility
+                        let mut next_attempt: Sudoku = attempt;
+                        next_attempt.rows[y][x] = Some(v);
+                        search_space.push(next_attempt);
                     }
+
+                    // Always break if we found an empty cell, since we only want to consider valid solutions
+                    break 'empty_cell;
                 }
             }
         }
