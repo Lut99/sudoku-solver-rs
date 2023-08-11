@@ -4,7 +4,7 @@
 //  Created:
 //    10 Aug 2023, 23:01:37
 //  Last edited:
-//    11 Aug 2023, 15:14:05
+//    11 Aug 2023, 15:25:35
 //  Auto updated?
 //    Yes
 // 
@@ -126,7 +126,7 @@ fn main() {
         // Write it to the terminal
         for (i, solution) in solutions.into_iter().enumerate() {
             println!("Solution to Sudoku '{}':", sudokus[i].0);
-            println!("{solution}");
+            println!("{}", solution.masked(&sudokus[i].1));
         }
     }
 

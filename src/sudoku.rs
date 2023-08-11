@@ -4,7 +4,7 @@
 //  Created:
 //    11 Aug 2023, 11:42:21
 //  Last edited:
-//    11 Aug 2023, 14:48:21
+//    11 Aug 2023, 15:26:21
 //  Auto updated?
 //    Yes
 // 
@@ -15,6 +15,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FResult};
 
+use console::Style;
 use enum_debug::EnumDebug;
 use ratatui::widgets::{Row, Table};
 use serde::{Deserialize, Serialize};
@@ -99,6 +100,112 @@ impl Display for InvalidReason {
     }
 }
 impl Error for InvalidReason {}
+
+
+
+
+
+/***** FORMATTERS *****/
+/// Formats the Sudoku with colour.
+#[derive(Debug)]
+pub struct SudokuColourFormatter<'s> {
+    /// The Sudoku to format.
+    sudoku : &'s Sudoku,
+}
+impl<'s> Display for SudokuColourFormatter<'s> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
+        // Define the colours
+        let gray: Style = Style::new().black().bright();
+
+        // Generate the rows...
+        for y in 0..9 {
+            // Generate the top thing if needed
+            if y == 0 {
+                writeln!(f, "{}", gray.apply_to("┌───┬───┬───╥───┬───┬───╥───┬───┬───┐"))?;
+            }
+
+            // Print the values in this row
+            write!(f, "{}", gray.apply_to("│"))?;
+            for x in 0..9 {
+                write!(f, " {} ", self.sudoku.rows[y][x].map(|i| format!("{i}")).unwrap_or(" ".into()))?;
+                if x < 8 && x % 3 == 2 { write!(f, "{}", gray.apply_to("║"))?; }
+                else { write!(f, "{}", gray.apply_to("│"))?; }
+            }
+            writeln!(f)?;
+
+            // Print the bottom thing
+            if y < 8 && y % 3 == 2 {
+                writeln!(f, "{}", gray.apply_to("╞═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╡"))?;
+            } else if y < 8 {
+                writeln!(f, "{}", gray.apply_to("├───┼───┼───╫───┼───┼───╫───┼───┼───┤"))?;
+            } else {
+                writeln!(f, "{}", gray.apply_to("└───┴───┴───╨───┴───┴───╨───┴───┴───┘"))?;
+            }
+        }
+
+        // Done
+        Ok(())
+    }
+}
+
+/// Formats the Sudoku with colour and a mask to determine which are 'fixed' numbers.
+#[derive(Debug)]
+pub struct SudokuMaskFormatter<'s, 'm> {
+    /// The Sudoku to format.
+    sudoku : &'s Sudoku,
+    /// The mask to apply.
+    mask   : &'m Sudoku,
+}
+impl<'s, 'm> Display for SudokuMaskFormatter<'s, 'm> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
+        // Define the colours
+        let masked : Style = Style::new().bold();
+        let error  : Style = Style::new().black().on_red();
+        let dim    : Style = Style::new();
+        let gray   : Style = Style::new().black().bright();
+
+        // Generate the rows...
+        for y in 0..9 {
+            // Generate the top thing if needed
+            if y == 0 {
+                writeln!(f, "{}", gray.apply_to("┌───┬───┬───╥───┬───┬───╥───┬───┬───┐"))?;
+            }
+
+            // Print the values in this row
+            write!(f, "{}", gray.apply_to("│"))?;
+            for x in 0..9 {
+                let value  : Option<u8> = self.sudoku.rows[y][x];
+                let svalue : String     = value.map(|i| format!("{i}")).unwrap_or(" ".into());
+
+                // WRite it with bold or not, depending on the mask
+                if value == self.mask.rows[y][x] {
+                    write!(f, " {} ", masked.apply_to(svalue))?;
+                } else if self.mask.rows[y][x].is_some() {
+                    write!(f, " {} ", error.apply_to(svalue))?;
+                } else {
+                    write!(f, " {} ", dim.apply_to(svalue))?;
+                }
+
+                // Write the border
+                if x < 8 && x % 3 == 2 { write!(f, "{}", gray.apply_to("║"))?; }
+                else { write!(f, "{}", gray.apply_to("│"))?; }
+            }
+            writeln!(f)?;
+
+            // Print the bottom thing
+            if y < 8 && y % 3 == 2 {
+                writeln!(f, "{}", gray.apply_to("╞═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╡"))?;
+            } else if y < 8 {
+                writeln!(f, "{}", gray.apply_to("├───┼───┼───╫───┼───┼───╫───┼───┼───┤"))?;
+            } else {
+                writeln!(f, "{}", gray.apply_to("└───┴───┴───╨───┴───┴───╨───┴───┴───┘"))?;
+            }
+        }
+
+        // Done
+        Ok(())
+    }
+}
 
 
 
@@ -260,6 +367,25 @@ impl Sudoku {
     pub fn is_finished(&self) -> bool { self.finished().is_ok() }
 
 
+
+    /// Displays the Sudoku with ANSI colours.
+    /// 
+    /// # Returns
+    /// A [`SudokuColourFormatter`] that can format the Sudoku with colours.
+    #[inline]
+    pub fn coloured(&self) -> SudokuColourFormatter { SudokuColourFormatter { sudoku: self } }
+
+    /// Displays the Sudoku with ANSI colours and a mask.
+    /// 
+    /// The mask is the original Sudoku so it can be highlighted which parts are 'fixed' and which are 'solved'.
+    /// 
+    /// # Arguments
+    /// - `mask`: The mask [`Sudoku`] to apply.
+    /// 
+    /// # Returns
+    /// A [`SudokuMaskFormatter`] that can format the Sudoku with colours.
+    #[inline]
+    pub fn masked<'s, 'm>(&'s self, mask: &'m Sudoku) -> SudokuMaskFormatter<'s, 'm> { SudokuMaskFormatter { sudoku: self, mask } }
 
     /// Renders the Sudoku as a ratatui [`Table`] widget.
     /// 
