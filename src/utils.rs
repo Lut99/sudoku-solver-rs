@@ -4,7 +4,7 @@
 //  Created:
 //    10 Aug 2023, 23:45:41
 //  Last edited:
-//    11 Aug 2023, 17:32:30
+//    12 Aug 2023, 00:01:55
 //  Auto updated?
 //    Yes
 // 
@@ -16,7 +16,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::{Debug, Display, Formatter, Result as FResult};
 use std::fs::File;
-use std::io::Read as _;
+use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::str::FromStr as _;
 
@@ -110,6 +110,29 @@ mod tests {
     }
 
     #[test]
+    fn test_load_simple_sudoku() {
+        // Try the new example first
+        let sudoku: Sudoku = match load_sudoku_of_type("./tests/example_new.ss", FileType::SimpleSudoku) {
+            Ok(mut sudoku) => sudoku.swap_remove(0),
+            Err(err)       => { panic!("Failed to parse sudoku file './tests/example_new.ss': {}", err.pretty()); },
+        };
+        assert_eq!(
+            sudoku,
+            Sudoku::from_compact([ 1,0,0,0,0,0,7,0,0,0,2,0,0,0,0,5,0,0,6,0,0,3,8,0,0,0,0,0,7,8,0,0,0,0,0,0,0,0,0,6,0,9,0,0,0,0,0,0,0,0,0,1,4,0,0,0,0,0,2,5,0,0,9,0,0,3,0,0,0,0,6,0,0,0,4,0,0,0,0,0,2 ]),
+        );
+
+        // Now that works, try to the old example
+        let sudoku: Sudoku = match load_sudoku_of_type("./tests/example_old.ss", FileType::SimpleSudoku) {
+            Ok(mut sudoku) => sudoku.swap_remove(0),
+            Err(err)       => { panic!("Failed to parse sudoku file './tests/example_old.ss': {}", err.pretty()); },
+        };
+        assert_eq!(
+            sudoku,
+            Sudoku::from_compact([ 0,6,0,1,0,4,0,5,0,0,0,8,3,0,5,6,0,0,2,0,0,0,0,0,0,0,1,8,0,0,4,0,7,0,0,6,0,0,6,0,0,0,3,0,0,7,0,0,9,0,1,0,0,4,5,0,0,0,0,0,0,0,2,0,0,7,2,0,6,9,0,0,0,4,0,5,0,8,0,7,0 ]),
+        );
+    }
+
+    #[test]
     fn test_load_simple_sudoku_new() {
         // Load the example
         let sudoku: Sudoku = match load_sudoku_of_type("./tests/example_new.ss", FileType::SimpleSudokuNew) {
@@ -121,6 +144,21 @@ mod tests {
         assert_eq!(
             sudoku,
             Sudoku::from_compact([ 1,0,0,0,0,0,7,0,0,0,2,0,0,0,0,5,0,0,6,0,0,3,8,0,0,0,0,0,7,8,0,0,0,0,0,0,0,0,0,6,0,9,0,0,0,0,0,0,0,0,0,1,4,0,0,0,0,0,2,5,0,0,9,0,0,3,0,0,0,0,6,0,0,0,4,0,0,0,0,0,2 ]),
+        )
+    }
+
+    #[test]
+    fn test_load_simple_sudoku_old() {
+        // Load the example
+        let sudoku: Sudoku = match load_sudoku_of_type("./tests/example_old.ss", FileType::SimpleSudokuOld) {
+            Ok(mut sudoku) => sudoku.swap_remove(0),
+            Err(err)       => { panic!("Failed to parse sudoku file './tests/example_old.ss': {}", err.pretty()); },
+        };
+
+        // Assert it is what we expect
+        assert_eq!(
+            sudoku,
+            Sudoku::from_compact([ 0,6,0,1,0,4,0,5,0,0,0,8,3,0,5,6,0,0,2,0,0,0,0,0,0,0,1,8,0,0,4,0,7,0,0,6,0,0,6,0,0,0,3,0,0,7,0,0,9,0,1,0,0,4,5,0,0,0,0,0,0,0,2,0,0,7,2,0,6,9,0,0,0,4,0,5,0,8,0,7,0 ]),
         )
     }
 }
@@ -286,6 +324,33 @@ impl Error for SudokuPuzzleCollectionError {
     }
 }
 
+/// Describes what can happen when loading [Simple Sudoku](FileType::SimpleSudoku) [`Sudoku`]s.
+#[derive(Debug)]
+pub enum SimpleSudokuError {
+    /// Failed to seek the file in between.
+    FileSeek { err: std::io::Error },
+    /// We failed to parse it in either way
+    ParseFailure { new: SimpleSudokuNewError, old: SimpleSudokuOldError },
+}
+impl Display for SimpleSudokuError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
+        use SimpleSudokuError::*;
+        match self {
+            FileSeek { .. }           => writeln!(f, "Failed to reset file handle"),
+            ParseFailure { new, old } => writeln!(f, "Failed to parse Sudoku file as either old-style or new-style SimpleSudoku\n\nNew-style error: {new}\n\nOld-style error: {old}\n"),
+        }
+    }
+}
+impl Error for SimpleSudokuError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        use SimpleSudokuError::*;
+        match self {
+            FileSeek { err }    => Some(err),
+            ParseFailure { .. } => None,
+        }
+    }
+}
+
 /// Describes what can happen when loading [Simple Sudoku (New Style)](FileType::SimpleSudokuNew) [`Sudoku`]s.
 #[derive(Debug)]
 pub enum SimpleSudokuNewError {
@@ -332,6 +397,43 @@ impl Error for SimpleSudokuNewError {
     }
 }
 
+/// Describes what can happen when loading [Simple Sudoku (Old Style)](FileType::SimpleSudokuOld) [`Sudoku`]s.
+#[derive(Debug)]
+pub enum SimpleSudokuOldError {
+    /// Failed to read the input file.
+    FileRead { err: std::io::Error },
+
+    /// Got too many columns.
+    TooManyCols { line: usize },
+    /// Got too many rows.
+    TooManyRows { line: usize },
+    /// Got an illegal character for a cell.
+    IllegalCellChar { line: usize, col: usize, got: String },
+}
+impl Display for SimpleSudokuOldError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
+        use SimpleSudokuOldError::*;
+        match self {
+            FileRead { .. } => write!(f, "Failed to read input file"),
+            TooManyCols { line }               => write!(f, "Too many cells on line {line}"),
+            TooManyRows { line }               => write!(f, "Line {line} adds too many rows to sudoku"),
+            IllegalCellChar { line, col, got } => write!(f, "Encountered illegal cell character '{got}' in line {line}, cell {col}"),
+        }
+    }
+}
+impl Error for SimpleSudokuOldError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        use SimpleSudokuOldError::*;
+        match self {
+            FileRead { err } => Some(err),
+
+            TooManyCols { .. }     => None,
+            TooManyRows { .. }     => None,
+            IllegalCellChar { .. } => None,
+        }
+    }
+}
+
 
 
 
@@ -347,13 +449,12 @@ impl Error for SimpleSudokuNewError {
 /// 
 /// # Errors
 /// This function may error if the given `handle` did not contain valid SudokuPuzzle contents.
-fn parse_sudoku_puzzle(mut handle: File) -> Result<Vec<Sudoku>, SudokuPuzzleError> {
+fn parse_sudoku_puzzle(handle: &mut File) -> Result<Vec<Sudoku>, SudokuPuzzleError> {
     // Read the whole file
     let mut raw: String = String::new();
     if let Err(err) = handle.read_to_string(&mut raw) {
         return Err(SudokuPuzzleError::FileRead{ err });
     }
-    drop(handle);
 
     // Read line-by-line to collect the cells
     let mut y: usize = 0;
@@ -415,13 +516,12 @@ fn parse_sudoku_puzzle(mut handle: File) -> Result<Vec<Sudoku>, SudokuPuzzleErro
 /// 
 /// # Errors
 /// This function may error if the given `handle` did not contain valid SudokuPuzzleProgress contents.
-fn parse_sudoku_puzzle_progress(mut handle: File) -> Result<Vec<Sudoku>, SudokuPuzzleProgressError> {
+fn parse_sudoku_puzzle_progress(handle: &mut File) -> Result<Vec<Sudoku>, SudokuPuzzleProgressError> {
     // Read the whole file
     let mut raw: String = String::new();
     if let Err(err) = handle.read_to_string(&mut raw) {
         return Err(SudokuPuzzleProgressError::FileRead{ err });
     }
-    drop(handle);
 
     // Reads the lines, separated by spaces
     let mut y: usize = 0;
@@ -480,14 +580,13 @@ fn parse_sudoku_puzzle_progress(mut handle: File) -> Result<Vec<Sudoku>, SudokuP
 /// A new [`Sudoku`] read from the given `handle.`
 /// 
 /// # Errors
-/// This function may error if the given `handle` did not contain valid SudokuPuzzleProgress contents.
-fn parse_sudoku_puzzle_collection(mut handle: File) -> Result<Vec<Sudoku>, SudokuPuzzleCollectionError> {
+/// This function may error if the given `handle` did not contain valid SudokuPuzzleCollection contents.
+fn parse_sudoku_puzzle_collection(handle: &mut File) -> Result<Vec<Sudoku>, SudokuPuzzleCollectionError> {
     // Read the whole file
     let mut raw: String = String::new();
     if let Err(err) = handle.read_to_string(&mut raw) {
         return Err(SudokuPuzzleCollectionError::FileRead{ err });
     }
-    drop(handle);
 
     // Read the lines (one Sudoku per line)
     let mut sudokus: Vec<Sudoku> = vec![];
@@ -519,6 +618,33 @@ fn parse_sudoku_puzzle_collection(mut handle: File) -> Result<Vec<Sudoku>, Sudok
     Ok(sudokus)
 }
 
+/// Parses the [Simple Sudoku](FileType::SimpleSudoku) format.
+/// 
+/// # Arguments
+/// - `handle`: A [`File`]-handle from which we read the puzzle.
+/// 
+/// # Returns
+/// A new [`Sudoku`] read from the given `handle.`
+/// 
+/// # Errors
+/// This function may error if the given `handle` did not contain valid SimpleSudoku contents.
+fn parse_simple_sudoku(handle: &mut File) -> Result<Vec<Sudoku>, SimpleSudokuError> {
+    // Attempt to parse as new Sudoku
+    let new_err: SimpleSudokuNewError = match parse_simple_sudoku_new(handle) {
+        Ok(sudokus) => { return Ok(sudokus); },
+        Err(err)    => err,
+    };
+
+    // Reset the handle
+    if let Err(err) = handle.seek(SeekFrom::Start(0)) { return Err(SimpleSudokuError::FileSeek { err }); }
+
+    // Try again with the old style
+    match parse_simple_sudoku_old(handle) {
+        Ok(sudokus) => Ok(sudokus),
+        Err(err)    => Err(SimpleSudokuError::ParseFailure { new: new_err, old: err }),
+    }
+}
+
 /// Parses the [Simple Sudoku (New Style)](FileType::SimpleSudokuNew) format.
 /// 
 /// # Arguments
@@ -528,14 +654,13 @@ fn parse_sudoku_puzzle_collection(mut handle: File) -> Result<Vec<Sudoku>, Sudok
 /// A new [`Sudoku`] read from the given `handle.`
 /// 
 /// # Errors
-/// This function may error if the given `handle` did not contain valid SudokuPuzzleProgress contents.
-fn parse_simple_sudoku_new(mut handle: File) -> Result<Vec<Sudoku>, SimpleSudokuNewError> {
+/// This function may error if the given `handle` did not contain valid SimpleSudokuNew contents.
+fn parse_simple_sudoku_new(handle: &mut File) -> Result<Vec<Sudoku>, SimpleSudokuNewError> {
     // Read the whole file
     let mut raw: String = String::new();
     if let Err(err) = handle.read_to_string(&mut raw) {
         return Err(SimpleSudokuNewError::FileRead{ err });
     }
-    drop(handle);
 
     // Read the lines
     let mut y: usize = 0;
@@ -573,6 +698,52 @@ fn parse_simple_sudoku_new(mut handle: File) -> Result<Vec<Sudoku>, SimpleSudoku
 
         // Add the row
         if y >= 9 { return Err(SimpleSudokuNewError::TooManyRows { line: l + 1 }); }
+        rows[y] = row;
+        y += 1;
+    }
+
+    // Done!
+    Ok(vec![ Sudoku::with_values(rows) ])
+}
+
+/// Parses the [Simple Sudoku (Old Style)](FileType::SimpleSudokuOld) format.
+/// 
+/// # Arguments
+/// - `handle`: A [`File`]-handle from which we read the puzzle.
+/// 
+/// # Returns
+/// A new [`Sudoku`] read from the given `handle.`
+/// 
+/// # Errors
+/// This function may error if the given `handle` did not contain valid SimpleSudokuOld contents.
+fn parse_simple_sudoku_old(handle: &mut File) -> Result<Vec<Sudoku>, SimpleSudokuOldError> {
+    // Read the whole file
+    let mut raw: String = String::new();
+    if let Err(err) = handle.read_to_string(&mut raw) {
+        return Err(SimpleSudokuOldError::FileRead{ err });
+    }
+
+    // Read the lines
+    let mut y: usize = 0;
+    let mut rows: [ [ Option<u8>; 9 ]; 9 ] = [ [ None; 9 ]; 9 ];
+    for (l, line) in raw.split('\n').enumerate() {
+        // Otherwise, simply parse nine numbers
+        let line_chars: Vec<&str> = line.graphemes(true).collect();
+        if line_chars.len() != 9 { return Err(SimpleSudokuOldError::TooManyCols { line: l + 1 }); }
+
+        // Parse 'em
+        let mut row: [ Option<u8>; 9 ] = [ None; 9 ];
+        for (x, c) in line_chars.into_iter().enumerate() {
+            // Otherwise, parse as digit
+            if c.len() == 1 && c.chars().next().unwrap() >= '0' && c.chars().next().unwrap() <= '9' {
+                row[x] = Some(u8::from_str(c).unwrap());
+            } else if c != "X" {
+                return Err(SimpleSudokuOldError::IllegalCellChar { line: l + 1, col: x + 1, got: c.into() });
+            }
+        }
+
+        // Add the row
+        if y >= 9 { return Err(SimpleSudokuOldError::TooManyRows { line: l + 1 }); }
         rows[y] = row;
         y += 1;
     }
@@ -683,7 +854,7 @@ pub fn load_sudoku_of_type(path: impl AsRef<Path>, ftype: FileType) -> Result<Ve
     let path: &Path = path.as_ref();
 
     // Open the file
-    let handle: File = match File::open(path) {
+    let mut handle: File = match File::open(path) {
         Ok(handle) => handle,
         Err(err)   => { return Err(LoadError::FileOpen { path: path.into(), err }); },
     };
@@ -697,27 +868,29 @@ pub fn load_sudoku_of_type(path: impl AsRef<Path>, ftype: FileType) -> Result<Ve
         },
 
         // Specialized formats
-        FileType::SudokuPuzzle => match parse_sudoku_puzzle(handle) {
+        FileType::SudokuPuzzle => match parse_sudoku_puzzle(&mut handle) {
             Ok(sudoku) => Ok(sudoku),
             Err(err)   => Err(LoadError::FileParse { ftype, path: path.into(), err: Box::new(err) }),
         },
-        FileType::SudokuPuzzleProgress => match parse_sudoku_puzzle_progress(handle) {
+        FileType::SudokuPuzzleProgress => match parse_sudoku_puzzle_progress(&mut handle) {
             Ok(sudoku) => Ok(sudoku),
             Err(err)   => Err(LoadError::FileParse { ftype, path: path.into(), err: Box::new(err) }),
         },
-        FileType::SudokuPuzzleCollection => match parse_sudoku_puzzle_collection(handle) {
+        FileType::SudokuPuzzleCollection => match parse_sudoku_puzzle_collection(&mut handle) {
             Ok(sudoku) => Ok(sudoku),
             Err(err)   => Err(LoadError::FileParse { ftype, path: path.into(), err: Box::new(err) }),
         },
-        FileType::SimpleSudoku => {
-            todo!();
-        },
-        FileType::SimpleSudokuNew => match parse_simple_sudoku_new(handle) {
+        FileType::SimpleSudoku => match parse_simple_sudoku(&mut handle) {
             Ok(sudoku) => Ok(sudoku),
             Err(err)   => Err(LoadError::FileParse { ftype, path: path.into(), err: Box::new(err) }),
         },
-        FileType::SimpleSudokuOld => {
-            todo!();
+        FileType::SimpleSudokuNew => match parse_simple_sudoku_new(&mut handle) {
+            Ok(sudoku) => Ok(sudoku),
+            Err(err)   => Err(LoadError::FileParse { ftype, path: path.into(), err: Box::new(err) }),
+        },
+        FileType::SimpleSudokuOld => match parse_simple_sudoku_old(&mut handle) {
+            Ok(sudoku) => Ok(sudoku),
+            Err(err)   => Err(LoadError::FileParse { ftype, path: path.into(), err: Box::new(err) }),
         },
     }
 }

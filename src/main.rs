@@ -4,7 +4,7 @@
 //  Created:
 //    10 Aug 2023, 23:01:37
 //  Last edited:
-//    11 Aug 2023, 23:38:21
+//    12 Aug 2023, 00:04:51
 //  Auto updated?
 //    Yes
 // 
@@ -13,12 +13,12 @@
 // 
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 use console::Style;
 use humanlog::{DebugMode, HumanLogger};
-use log::error;
+use log::{error, warn};
 
 use sudoku_solver::engine::Engine;
 use sudoku_solver::solvers::{BruteForceSolver, Solver as _};
@@ -38,16 +38,20 @@ struct Arguments {
 
     /// If given, does not show the final version but instead shows only the solutions to the `n` first cells.
     #[clap(long, help="If given, does not show the final version but instead shows only the solutions to the given number of first empty cells.")]
-    hint       : Option<u8>,
-    /// Determines the type of the loaded file.
-    #[clap(short='t', long, help="Overrides deriving the input file type with this fixed type instead. Note that this applies to ALL input files. Will be ignored if no file is given.")]
-    input_type : Option<FileType>,
-    /// Determines the timout in between steps (in ms).
-    #[clap(short='T', long, default_value="50", help="The timeout in between compute steps, for visualisation purposes.")]
-    timeout    : u64,
+    hint     : Option<u8>,
     /// Runs the solver without UI. Note that you cannot select files this way.
     #[clap(long, help="If given, runs without UI at maximum speed. Note that you cannot insert a Sudoku yourself this way.")]
-    headless   : bool,
+    headless : bool,
+
+    /// If given, verifies that the input Sudoku is well-formed.
+    #[clap(short='V', long, help="If given, verifies that the input Sudoku is well-formed.")]
+    verify_input : bool,
+    /// Determines the type of the loaded file.
+    #[clap(short='t', long, help="Overrides deriving the input file type with this fixed type instead. Note that this applies to ALL input files. Will be ignored if no file is given.")]
+    input_type   : Option<FileType>,
+    /// Determines the timout in between steps (in ms).
+    #[clap(short='T', long, default_value="50", help="The timeout in between compute steps, for visualisation purposes.")]
+    timeout      : u64,
 }
 
 
@@ -81,12 +85,28 @@ fn main() {
             }
         };
 
-        // Add it to the list
-        if fsudokus.len() == 1 {
-            sudokus.push((sudoku_path.display().to_string(), fsudokus.swap_remove(0)));
+        // Construct a to-be-added list of that
+        let to_be_added: Vec<(String, Sudoku)> = if fsudokus.len() == 1 {
+            vec![ (sudoku_path.display().to_string(), fsudokus.swap_remove(0)) ]
         } else {
-            sudokus.extend(fsudokus.into_iter().enumerate().map(|(i, s)| (format!("{} ({})", sudoku_path.display(), i + 1), s)));
+            fsudokus.into_iter().enumerate().map(|(i, s)| (format!("{} ({})", sudoku_path.display(), i + 1), s)).collect()
+        };
+
+        // If told, verify the input
+        if args.verify_input {
+            let mut errored: bool = false;
+            for (name, sudoku) in &to_be_added {
+                if let Err(reason) = sudoku.well_formed() {
+                    error!("Sudoku '{name}' is ill-formed: {reason}");
+                    println!("{}", sudoku.coloured());
+                    errored = true;
+                }
+            }
+            if errored { std::process::exit(0); }
         }
+
+        // Add it to the list
+        sudokus.extend(to_be_added);
     }
     println!();
 
@@ -127,7 +147,10 @@ fn main() {
         let mut solver: BruteForceSolver = BruteForceSolver::new();
         let solutions: Vec<Sudoku> = sudokus.iter().map(|s| {
             println!("Solving Sudoku '{}'...", s.0);
-            solver.run(s.1)
+            let start: Instant = Instant::now();
+            let solution: Sudoku = solver.run(s.1);
+            println!("(Time taken: {}ms)", start.elapsed().as_millis());
+            solution
         }).collect();
         println!();
     
@@ -153,7 +176,13 @@ fn main() {
                 }
 
                 // Show the hint
-                println!("{}", hint.masked(&sudokus[i].1).colour(Style::new().green().bold()));
+                print!("{}", hint.masked(&sudokus[i].1).colour(Style::new().green().bold()));
+
+                // Show a warning if incomplete still
+                if !hint.is_finished() {
+                    warn!("Note that this sudoku was not solved!");
+                }
+                println!();
             }
         } else {
             for (i, solution) in solutions.into_iter().enumerate() {
