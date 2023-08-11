@@ -4,7 +4,7 @@
 //  Created:
 //    11 Aug 2023, 11:42:21
 //  Last edited:
-//    11 Aug 2023, 15:26:21
+//    11 Aug 2023, 17:16:06
 //  Auto updated?
 //    Yes
 // 
@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn test_sudoku_well_formedness() {
-        let sudoku: Sudoku = load_sudoku("./tests/correct.json").unwrap_or_else(|err| panic!("Failed to load correct Sudoku: {}", err.pretty()));
+        let sudoku: Sudoku = load_sudoku("./tests/correct.json").unwrap_or_else(|err| panic!("Failed to load correct Sudoku: {}", err.pretty())).swap_remove(0);
         println!("\n{sudoku}");
 
         // Assert the correct one is well formed & finished
@@ -115,6 +115,7 @@ pub struct SudokuColourFormatter<'s> {
 impl<'s> Display for SudokuColourFormatter<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
         // Define the colours
+        let cell: Style = Style::new().bold();
         let gray: Style = Style::new().black().bright();
 
         // Generate the rows...
@@ -127,7 +128,7 @@ impl<'s> Display for SudokuColourFormatter<'s> {
             // Print the values in this row
             write!(f, "{}", gray.apply_to("│"))?;
             for x in 0..9 {
-                write!(f, " {} ", self.sudoku.rows[y][x].map(|i| format!("{i}")).unwrap_or(" ".into()))?;
+                write!(f, " {} ", cell.apply_to(self.sudoku.rows[y][x].map(|i| format!("{i}")).unwrap_or(" ".into())))?;
                 if x < 8 && x % 3 == 2 { write!(f, "{}", gray.apply_to("║"))?; }
                 else { write!(f, "{}", gray.apply_to("│"))?; }
             }
@@ -159,9 +160,9 @@ pub struct SudokuMaskFormatter<'s, 'm> {
 impl<'s, 'm> Display for SudokuMaskFormatter<'s, 'm> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
         // Define the colours
-        let masked : Style = Style::new().bold();
+        let masked : Style = Style::new().bold().blue();
         let error  : Style = Style::new().black().on_red();
-        let dim    : Style = Style::new();
+        let dim    : Style = Style::new().bold();
         let gray   : Style = Style::new().black().bright();
 
         // Generate the rows...
@@ -238,14 +239,42 @@ impl Sudoku {
     /// Constructor for a Sudoku with given values.
     /// 
     /// # Arguments
-    /// - `cells`: The cells to initialize the Sudoku with.
+    /// - `rows`: The rows to initialize the Sudoku with.
     /// 
     /// # Returns
     /// A new instance of Self with the given values in the cells.
     #[inline]
-    pub fn with_values(cells: impl Into<[ [ Option<u8>; 9 ]; 9 ]>) -> Self {
+    pub fn with_values(rows: impl Into<[ [ Option<u8>; 9 ]; 9 ]>) -> Self {
         Self {
-            rows : cells.into(),
+            rows : rows.into(),
+        }
+    }
+
+    /// Constructor for succintly defining Sudoku's.
+    /// 
+    /// # Arguments
+    /// - `cells`: A list of cells. `0` means [`None`].
+    /// 
+    /// # Returns
+    /// A new instance of Self with the given values in the cells.
+    /// 
+    /// # Panics
+    /// This function may panic if the given list does not have 81 entries.
+    #[inline]
+    #[track_caller]
+    pub fn from_compact(cells: impl AsRef<[u8]>) -> Self {
+        let cells: &[u8] = cells.as_ref();
+        if cells.len() != 81 { panic!("Input list of cells must be 81 elements, got {}", cells.len()); }
+
+        // Cast it to rows
+        let mut rows: [ [ Option<u8>; 9 ]; 9 ] = [ [ None; 9 ]; 9 ];
+        for (i, c) in cells.into_iter().enumerate() {
+            rows[i / 9][i % 9] = if *c > 0 { Some(*c) } else { None };
+        }
+
+        // Create ourselves with that
+        Self {
+            rows,
         }
     }
 

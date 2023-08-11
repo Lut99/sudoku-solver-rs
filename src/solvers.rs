@@ -4,7 +4,7 @@
 //  Created:
 //    10 Aug 2023, 23:03:23
 //  Last edited:
-//    11 Aug 2023, 15:00:26
+//    11 Aug 2023, 17:01:28
 //  Auto updated?
 //    Yes
 // 
@@ -25,7 +25,7 @@ mod tests {
     fn test_brute_force_solver() {
         // Test an empty Sudoku can be solved
         {
-            let empty: Sudoku = load_sudoku("./tests/empty.json").unwrap_or_else(|err| panic!("Failed to load empty Sudoku: {}", err.pretty()));
+            let empty: Sudoku = load_sudoku("./tests/empty.json").unwrap_or_else(|err| panic!("Failed to load empty Sudoku: {}", err.pretty())).swap_remove(0);
             println!("\n{empty}");
 
             let mut solver: BruteForceSolver = BruteForceSolver::new();
@@ -35,7 +35,7 @@ mod tests {
 
         // Test if a fixed Sudoku is solved
         {
-            let correct: Sudoku = load_sudoku("./tests/correct.json").unwrap_or_else(|err| panic!("Failed to load correct Sudoku: {}", err.pretty()));
+            let correct: Sudoku = load_sudoku("./tests/correct.json").unwrap_or_else(|err| panic!("Failed to load correct Sudoku: {}", err.pretty())).swap_remove(0);
             println!("{correct}");
 
             let mut solver: BruteForceSolver = BruteForceSolver::new();

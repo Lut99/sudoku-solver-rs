@@ -4,7 +4,7 @@
 //  Created:
 //    10 Aug 2023, 23:01:37
 //  Last edited:
-//    11 Aug 2023, 15:25:35
+//    11 Aug 2023, 17:03:09
 //  Auto updated?
 //    Yes
 // 
@@ -65,7 +65,7 @@ fn main() {
     for sudoku_path in args.files {
         // Attempt to load it according to our method
         println!("Loading Sudoku '{}'...", sudoku_path.display());
-        let sudoku: Sudoku = if let Some(ftype) = args.input_type {
+        let mut fsudokus: Vec<Sudoku> = if let Some(ftype) = args.input_type {
             match load_sudoku_of_type(&sudoku_path, ftype) {
                 Ok(sudoku) => sudoku,
                 Err(err)   => { error!("Failed to load sudoku file '{}' as {}: {}", sudoku_path.display(), ftype, err); std::process::exit(1); },
@@ -78,7 +78,11 @@ fn main() {
         };
 
         // Add it to the list
-        sudokus.push((sudoku_path.display().to_string(), sudoku));
+        if fsudokus.len() == 1 {
+            sudokus.push((sudoku_path.display().to_string(), fsudokus.swap_remove(0)));
+        } else {
+            sudokus.extend(fsudokus.into_iter().enumerate().map(|(i, s)| (format!("{} ({})", sudoku_path.display(), i + 1), s)));
+        }
     }
     println!();
 
